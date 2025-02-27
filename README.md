@@ -1,18 +1,14 @@
 # local-web-search
 
-This is designed to be used in [ChatWise](https://chatwise.app)'s [local web search](https://docs.chatwise.app/web-search.html#local-browsers) feature.
-
-## Development
-
-```bash
-bun ./src/cli.ts search -q "some keyword" --show
-```
-
 ## Build as a MCP server
 
 Build the MCP server:
 
 ```bash
+git clone git@github.com:yrom/local-web-search.git
+cd local-web-search
+# run after install bun: https://bun.sh/
+bun install
 bun run build:mcp
 ```
 
@@ -37,6 +33,10 @@ Debugging with MCP Inspector:
 ```bash
 bunx @modelcontextprotocol/inspector -e HTTPS_PROXY=http://127.0.0.1:7890 bun ./src/mcp-server.ts
 ```
+
+## Notice:
+
+This project is forked from [local-web-search](https://github.com/egoist/local-web-search) and modified to support [Model Context Protocol](https://github.com/modelcontextprotocol/typescript-sdk)
 
 ## License
 
