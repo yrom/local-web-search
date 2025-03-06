@@ -155,13 +155,14 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
 
 server.tool(
     "google_search",
-    { query: z.string() },
-    async ({ query }) => {
+    "Search for a query by Google and return the results",
+    { query: z.string(), maxResults: z.number().optional().or(z.string().optional()) },
+    async ({ query, maxResults }) => {
         const browser = await useBrowser()
         try {
             const results = await search(browser, {
                 query,
-                maxResults: 5
+                maxResults: (typeof maxResults === 'string') ? Number(maxResults) : maxResults || 10,
             })
             return {
                 content: [{ type: "text", text: JSON.stringify(results, null, 2) } as TextContent]
@@ -176,6 +177,7 @@ server.tool(
 
 server.tool(
     "visit_link",
+    "Visit a link and extract web content",
     { url: z.string() },
     async ({ url }) => {
         const browser = await useBrowser()
@@ -193,7 +195,30 @@ server.tool(
         }
     }
 );
-
+server.tool(
+    "visit_links",
+    "Visit multiple links and extract content from each",
+    {
+        urls: z.array(
+            z.string()
+        )
+    },
+    async ({ urls }) => {
+        const browser = await useBrowser()
+        const results = await Promise.all(urls.map(async (url) => {
+            try {
+                const result = await visitLink(browser, url)
+                if (!result) return { url, text: "Failed to load page of url: " + url }
+                return { url, text: JSON.stringify(result, null, 2) }
+            } catch (error) {
+                return { url, text: `Error: ${error}` }
+            }
+        }))
+        return {
+            content: results.map(({ url, text }) => ({ type: "text", text: text }) as TextContent)
+        }
+    }
+);
 // Initialize MCP server connection using stdio transport
 server.connect(new StdioServerTransport()).catch((error) => {
     console.error("Failed to start server:", error);
@@ -206,6 +231,7 @@ async function cleanup() {
         await state.browser.close()
         state.browser = null
     }
+    process.exit(0);
 }
 
 // Register cleanup handlers
