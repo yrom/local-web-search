@@ -1,6 +1,6 @@
 export const getReadabilityScript = async () => {
   const result = await Bun.build({
-    entrypoints: ["./node_modules/@mozilla/readability/Readability.js"],
+    entrypoints: ["./node_modules/@mozilla/readability/index.js"],
     format: "cjs",
     minify: true,
   })

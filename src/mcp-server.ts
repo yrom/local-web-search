@@ -29,6 +29,7 @@ const PageContentSchema = z.object({
     publishedTime: z.string().optional(),
     title: z.string().optional(),
     content: z.string().optional(),
+    length: z.number().optional(),
 })
 type SearchResult = z.infer<typeof SearchResultSchema>
 type PageContent = z.infer<typeof PageContentSchema>
@@ -118,23 +119,41 @@ async function performGoogleSearch(
 async function visitLink(browser: BrowserMethods, url: string): Promise<PageContent | null> {
     const readabilityScript = await getReadabilityScript()
     const result = await browser.withPage(async (page) => {
-        await page.goto(url, {
-            waitUntil: "domcontentloaded",
+        const resp = await page.goto(url, {
+            waitUntil: "networkidle",
             timeout: 30_000,
         })
+        if (resp?.ok() === false) {
+            console.error(`Unable to load page: ${url}`)
+            return null
+        }
+        await page.waitForTimeout(1000)
 
         return await page.evaluate(
-            ([readabilityScript, selectorsToRemove]) => {
-                const Readability = new Function(
+            ([readabilityScript]) => {
+                const { Readability, isProbablyReaderable } = new Function(
                     "module",
                     `${readabilityScript}\nreturn module.exports`,
                 )({})
 
                 const document = window.document.cloneNode(true) as HTMLDocument;
+                try {
+                    document
+                        .querySelectorAll('svg,img,video,audio,iframe,canvas,header,footer,noscript,a[href*="javascript:"]')
+                        .forEach((el) => el.remove())
+                } catch (error) {
+                    console.error("Error removing elements:", error);
+                }
+                if (!isProbablyReaderable(document)) {
+                    try {
                 document
-                    .querySelectorAll('svg,img,video,iframe,canvas')
+                            .querySelectorAll('script,*[style*="display:none"],*[style*="display: none"],*[hidden]')
                     .forEach((el) => el.remove())
-
+                    } catch (error) {
+                        console.error("Error removing elements:", error);
+                    }
+                    return { title: document.title, content: document.body.innerHTML }
+                }
                 const article = new Readability(document).parse()
 
                 const title = article?.title || document.title
@@ -152,7 +171,7 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
 
     const content = toMarkdown(result.content)
 
-    return { ...result, url, content }
+    return { ...result, url, content, length: content.length }
 }
 
 server.tool(

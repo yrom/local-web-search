@@ -98,10 +98,12 @@ export const launchBrowser = async (
       try {
         await interceptRequest(page)
         const result = await fn(page)
+
         await page.close()
         return result
       } catch (error) {
         await page.close()
+        console.error(error)
         throw error
       }
     },
@@ -112,8 +114,25 @@ async function interceptRequest(page: Page) {
   await applyStealthScripts(page)
 
   await page.route("**/*", (route) => {
-    if (route.request().resourceType() !== "document") {
-      return route.abort()
+    // map github blob content to raw.githubusercontent.com
+    const url = route.request().url()
+    if (new URL(url).hostname === "github.com" && url.includes("/blob/")) {
+      let newUrl = url
+      // https://github.com/run-llama/LlamaIndexTS/blob/main/LICENSE
+      // => https://raw.githubusercontent.com/run-llama/LlamaIndexTS/main/LICENSE
+      newUrl = url.replace(/github\.com\/([^/]+)\/([^/]+)\/blob\//, "raw.githubusercontent.com/$1/$2/")
+      console.warn("redirect to", newUrl)
+      return route.fulfill({
+        status: 302,
+        headers: {
+          location: newUrl,
+        },
+      })
+    }
+
+    if (!["document", "script"].includes(route.request().resourceType())) {
+      console.error("abort", route.request().resourceType(), route.request().url())
+      return route.abort('timedout')
     }
 
     return route.continue()
