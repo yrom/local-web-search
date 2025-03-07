@@ -44,7 +44,7 @@ async function useBrowser() {
 }
 
 
-function getSearchUrl({ query, maxResults }: { query: string, maxResults?: number }) {
+function getGoogleSearchUrl({ query, maxResults }: { query: string, maxResults?: number }) {
     const searchParams = new URLSearchParams({
         q: query,
         num: `${maxResults || 10}`,
@@ -57,14 +57,14 @@ function getSearchUrl({ query, maxResults }: { query: string, maxResults?: numbe
 
     return url
 }
-async function search(
+async function performGoogleSearch(
     browser: BrowserMethods,
     options: {
         query: string
         maxResults?: number
     },
 ): Promise<SearchResult[] | null> {
-    const url = getSearchUrl(options)
+    const url = getGoogleSearchUrl(options)
 
     let searchResults = await browser.withPage(async (page) => {
         await page.goto(url, {
@@ -120,8 +120,9 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
     const result = await browser.withPage(async (page) => {
         await page.goto(url, {
             waitUntil: "domcontentloaded",
-            timeout: 15_000,
+            timeout: 30_000,
         })
+
         return await page.evaluate(
             ([readabilityScript, selectorsToRemove]) => {
                 const Readability = new Function(
@@ -131,18 +132,19 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
 
                 const document = window.document.cloneNode(true) as HTMLDocument;
                 document
-                    .querySelectorAll(selectorsToRemove.join(","))
+                    .querySelectorAll('svg,img,video,iframe,canvas')
                     .forEach((el) => el.remove())
 
                 const article = new Readability(document).parse()
 
                 const title = article?.title || document.title
-                const author = article?.byline
-                const publishedTime = article?.publishedTime
+                const author = article?.byline || ""
+                const publishedTime = article?.publishedTime || document.lastModified
                 const content = article?.content
+
                 return { title, author, publishedTime, content }
             },
-            [readabilityScript, SELECTORS_TO_REMOVE] as const,
+            [readabilityScript]
         )
     })
 
@@ -166,7 +168,7 @@ server.tool(
     async ({ query, maxResults }) => {
         const browser = await useBrowser()
         try {
-            const results = await search(browser, {
+            const results = await performGoogleSearch(browser, {
                 query,
                 maxResults: (typeof maxResults === 'string') ? Number(maxResults) : maxResults || 10,
             })
@@ -180,6 +182,36 @@ server.tool(
         }
     }
 );
+
+server.tool(
+    "google_search_and_visit",
+    "Search for a query by Google and scrape the content of the top 5 SERP results",
+    {
+        query: z.string().describe("The search query to perform, should be clear and concise keywords"),
+    },
+    async ({ query }) => {
+        const browser = await useBrowser()
+        try {
+            const results = await performGoogleSearch(browser, { query, maxResults: 5 })
+            const pageContents = await Promise.all(results!.map(async (result) => {
+                try {
+                    const pageContent = await visitLink(browser, result.url)
+                    if (!pageContent) return { url: result.url, content: "Failed to load page" }
+                    return pageContent
+                } catch (error) {
+                    return { url: result.url, content: `Error: ${error}` }
+                }
+            }))
+            return {
+                content: pageContents.map((p) => ({ type: "text", text: JSON.stringify(p, null, 0) }) as TextContent)
+            }
+        } catch (error) {
+            return {
+                content: [{ type: "text", text: `Error: ${error}` } as TextContent], isError: true,
+            }
+        }
+    }
+)
 
 server.tool(
     "visit_link",

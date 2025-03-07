@@ -3,6 +3,9 @@ import { gfm } from "turndown-plugin-gfm"
 import { stripHTML } from "./utils"
 
 const turndown = new Turndown({
+  headingStyle: "atx",
+  bulletListMarker: "-",
+  linkStyle: "referenced",
   codeBlockStyle: "fenced",
 })
 turndown.use(gfm)
