@@ -49,6 +49,7 @@ export const launchBrowser = async (
       // "--enable-webgl",
       // "--use-gl=swiftshader",
       // "--enable-accelerated-2d-canvas",
+      "--no-first-run",
       "--disable-blink-features=AutomationControlled",
       "--disable-web-security",
       options.profilePath
@@ -57,20 +58,26 @@ export const launchBrowser = async (
     ].filter((v) => v !== null),
     ignoreDefaultArgs: ["--enable-automation"],
     viewport: {
-      width: 1280,
-      height: 720,
+      width: 800,
+      height: 1080,
     },
     deviceScaleFactor: 1,
     locale: "en-US",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9,zh-CN,zh;q=0.8",
+    },
     acceptDownloads: false,
     bypassCSP: true,
-    hasTouch: true,
-    userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/237.84.2.178 Safari/537.36`,
+    hasTouch: false,
+    isMobile: false,
+    // userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/237.84.2.178 Safari/537.36`,
     ignoreHTTPSErrors: true,
-    handleSIGHUP: true,
-    handleSIGINT: true,
-    handleSIGTERM: true,
+    handleSIGHUP: false,
+    handleSIGINT: false,
+    handleSIGTERM: false,
     chromiumSandbox: false,
+    reducedMotion: "no-preference",
+    forcedColors: "none",
     proxy: options.proxy
       ? {
           server: options.proxy,
@@ -115,6 +122,9 @@ async function interceptRequest(page: Page) {
 
 async function applyStealthScripts(page: Page) {
   await page.addInitScript(() => {
+    // 模拟真实的屏幕尺寸和颜色深度
+    Object.defineProperty(window.screen, "colorDepth", { get: () => 24 });
+    Object.defineProperty(window.screen, "pixelDepth", { get: () => 24 });
     // Override the navigator.webdriver property
     Object.defineProperty(navigator, "webdriver", {
       get: () => undefined,
@@ -122,7 +132,7 @@ async function applyStealthScripts(page: Page) {
 
     // Mock languages and plugins to mimic a real browser
     Object.defineProperty(navigator, "languages", {
-      get: () => ["en-US", "en"],
+      get: () => ["en-US", "en", "zh-CN", "zh"],
     })
 
     Object.defineProperty(navigator, "plugins", {
@@ -133,7 +143,13 @@ async function applyStealthScripts(page: Page) {
     Object.defineProperty(navigator, "headless", {
       get: () => false,
     })
-
+    // @ts-ignore
+    window.chrome = {
+      runtime: {},
+      loadTimes: function () { },
+      csi: function () { },
+      app: {},
+    };
     // Override the permissions API
     const originalQuery = window.navigator.permissions.query
     window.navigator.permissions.query = (parameters) =>
@@ -142,5 +158,19 @@ async function applyStealthScripts(page: Page) {
             state: Notification.permission,
           } as PermissionStatus)
         : originalQuery(parameters)
+    
+    if (typeof WebGLRenderingContext !== "undefined") {
+      const originalGetParameter = WebGLRenderingContext.prototype.getParameter
+      // https://cloud.tencent.com/developer/article/2396126
+      WebGLRenderingContext.prototype.getParameter = function (parameter) {
+        if (parameter === 37445) {
+          return "Google Inc. (Apple)"
+        }
+        if (parameter === 37446) {
+          return "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)"
+        }
+        return originalGetParameter(parameter)
+      }
+    }
   })
 }

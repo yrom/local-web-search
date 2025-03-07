@@ -156,7 +156,13 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
 server.tool(
     "google_search",
     "Search for a query by Google and return the results",
-    { query: z.string(), maxResults: z.number().optional().or(z.string().optional()) },
+    {
+        query: z.string().describe("The search query to perform, should be clear and concise keywords"),
+        maxResults: z.number()
+            .or(z.string())
+            .optional()
+            .describe("The maximum number of results to return, default is 10"),
+    },
     async ({ query, maxResults }) => {
         const browser = await useBrowser()
         try {
@@ -178,7 +184,7 @@ server.tool(
 server.tool(
     "visit_link",
     "Visit a link and extract web content",
-    { url: z.string() },
+    { url: z.string().describe("URL of the page to visit") },
     async ({ url }) => {
         const browser = await useBrowser()
 
@@ -199,9 +205,7 @@ server.tool(
     "visit_links",
     "Visit multiple links and extract content from each",
     {
-        urls: z.array(
-            z.string()
-        )
+        urls: z.array(z.string()).describe("List of URLs to visit, should be an array of strings"),
     },
     async ({ urls }) => {
         const browser = await useBrowser()
