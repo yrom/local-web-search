@@ -72,11 +72,20 @@ async function performGoogleSearch(
             waitUntil: "domcontentloaded",
             timeout: 15_000,
         })
+        await page.waitForSelector('#search', { timeout: 10_000 });
         const results = await page.evaluate(() => {
             // Find all search result containers
-            const elements = document.querySelectorAll('div.g');
+            const containerSelectors = [
+                'div.g',
+                'div.MjjYud',
+                'div.wHYlTd'
+            ]
+            for (const selector of containerSelectors) {
+                const elements = document.querySelectorAll(selector);
+
             if (!elements || elements.length === 0) {
-                return [];
+                    console.log('missing elements ', selector)
+                    continue
             }
 
             // Extract data from each result
@@ -99,6 +108,8 @@ async function performGoogleSearch(
                     snippet: snippetEl.textContent || '',    // Result description
                 };
             }).filter(result => result !== null && result.url.length > 0);  // Remove invalid results
+            }
+            return [];
         });
 
         // Return compiled list of results
@@ -120,7 +131,7 @@ async function visitLink(browser: BrowserMethods, url: string): Promise<PageCont
     const readabilityScript = await getReadabilityScript()
     const result = await browser.withPage(async (page) => {
         const resp = await page.goto(url, {
-            waitUntil: "networkidle",
+            waitUntil: "domcontentloaded",
             timeout: 30_000,
         })
         if (resp?.ok() === false) {
